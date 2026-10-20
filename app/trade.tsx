@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MARKETS } from "@/lib/papertrade/markets";
-import { closePositions, openPosition } from "./trade-actions";
+import { closePosition, openPosition, syncAccount } from "./trade-actions";
 
 export type PositionView = {
   positionId: string;
@@ -32,7 +31,6 @@ const REFRESH_EVERY_MS = 2000;
 const SETTLE_TIMEOUT_MS = 75_000;
 
 export function Trade({ view }: { view: TradeView }) {
-  const router = useRouter();
   const [coin, setCoin] = useState<string>(MARKETS[0].coin);
   const [margin, setMargin] = useState("10");
   const [leverage, setLeverage] = useState("100");
@@ -48,9 +46,9 @@ export function Trade({ view }: { view: TradeView }) {
   // Re-read the account until papertrade settles the order.
   useEffect(() => {
     if (!waiting) return;
-    const timer = setTimeout(() => router.refresh(), REFRESH_EVERY_MS);
+    const timer = setTimeout(() => void syncAccount(), REFRESH_EVERY_MS);
     return () => clearTimeout(timer);
-  }, [waiting, view, router]);
+  }, [waiting, view]);
 
   function submit(next: () => Promise<{ ok: true; awaiting: Awaiting } | { ok: false; error: string }>) {
     setError(null);
@@ -80,7 +78,7 @@ export function Trade({ view }: { view: TradeView }) {
 
   function close(positionId: string) {
     submit(async () => {
-      const result = await closePositions([positionId]);
+      const result = await closePosition(positionId);
       return result.ok ? { ok: true, awaiting: { kind: "close", positionIds: [positionId] } } : result;
     });
   }
@@ -145,7 +143,7 @@ export function Trade({ view }: { view: TradeView }) {
         <p>No open positions.</p>
       ) : (
         <div className="w-full overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-label="Open positions">
             <thead>
               <tr className="text-left">
                 <th className="p-1">Market</th>

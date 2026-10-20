@@ -1,6 +1,14 @@
 import "server-only";
 
-import { parseSignature, type Hex, type LocalAccount } from "viem";
+import {
+  concat,
+  hashTypedData,
+  keccak256,
+  parseSignature,
+  toBytes,
+  type Hex,
+  type LocalAccount,
+} from "viem";
 import { CHAIN_ID, EXCHANGE } from "./config";
 
 // "String" really is the domain name papertrade's contracts verify against.
@@ -49,6 +57,8 @@ export type Close = {
   deadline: bigint;
 };
 
+const INTENT_ID_TAG = keccak256(toBytes("papertrade:intent-id:v2"));
+
 /** Relayer wire format: uints as decimal strings, addresses lowercase, bools as bools. */
 function serialize(value: unknown): unknown {
   if (typeof value === "bigint" || typeof value === "number") return value.toString();
@@ -57,23 +67,30 @@ function serialize(value: unknown): unknown {
   return value;
 }
 
-/** Signs an intent with a session key and returns the `signed` body the relayer takes. */
+/**
+ * Signs an intent with a session key. Returns the `signed` body the relayer takes
+ * and the intent's ID, which papertrade derives from the EIP-712 digest and signer.
+ */
 export async function signIntent<T extends keyof typeof TYPES>(
   signer: LocalAccount,
   primaryType: T,
   message: T extends "OpenPosition" ? OpenPosition : Close,
 ) {
-  const signature = await signer.signTypedData({
+  const typedData = {
     domain: DOMAIN,
     types: { [primaryType]: TYPES[primaryType] } as Pick<typeof TYPES, T>,
     primaryType,
     message,
-  } as Parameters<LocalAccount["signTypedData"]>[0]);
+  } as Parameters<LocalAccount["signTypedData"]>[0];
+  const signature = await signer.signTypedData(typedData);
   const { r, s, yParity } = parseSignature(signature);
   return {
-    ...Object.fromEntries(Object.entries(message).map(([k, v]) => [k, serialize(v)])),
-    v: String(27 + (yParity ?? 0)),
-    r: r.toLowerCase(),
-    s: s.toLowerCase(),
+    signed: {
+      ...Object.fromEntries(Object.entries(message).map(([k, v]) => [k, serialize(v)])),
+      v: String(27 + (yParity ?? 0)),
+      r: r.toLowerCase(),
+      s: s.toLowerCase(),
+    },
+    intentId: keccak256(concat([INTENT_ID_TAG, hashTypedData(typedData), signer.address])),
   };
 }

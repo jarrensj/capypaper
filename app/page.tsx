@@ -7,7 +7,9 @@ import {
 } from "@/lib/papertrade/config";
 import { MARKETS } from "@/lib/papertrade/markets";
 import { currentSession } from "@/lib/session";
+import { recentTrades } from "@/lib/trades";
 import { Trade, type TradeView } from "./trade";
+import { TradeFeed } from "./trade-feed";
 import { WalletSession, type SessionView } from "./wallet-session";
 
 export default function Home() {
@@ -27,7 +29,10 @@ async function Session() {
 
   // Papertrade is the source of truth for the key's expiry; fall back to the last
   // confirmed one if it can't be reached.
-  const account = await readAccount(session.wallet).catch(() => null);
+  const [account, trades] = await Promise.all([
+    readAccount(session.wallet).catch(() => null),
+    recentTrades(),
+  ]);
   const expiry = account
     ? account.sessionKeys.get(session.sessionKeyAddress)
     : session.expiresAt && session.expiresAt.getTime() / 1000;
@@ -45,6 +50,7 @@ async function Session() {
         }}
       />
       {canTrade && <Trade view={tradeView(account)} />}
+      <TradeFeed trades={trades} wallet={session.wallet} />
     </>
   );
 }
