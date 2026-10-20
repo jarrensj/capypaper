@@ -32,16 +32,21 @@ export function TradeFeed({ trades, wallet }: { trades: Trade[]; wallet: string 
                   <tr key={trade.intentId} data-intent-id={trade.intentId}>
                     <td className="p-1">{formatTime(trade.createdAt)}</td>
                     <td className="p-1">
-                      {trade.wallet === wallet ? "You" : <code>{shortAddress(trade.wallet)}</code>}
+                      {trade.wallet === wallet ? (
+                        "You"
+                      ) : (
+                        (trade.traderName ?? <code>{shortAddress(trade.wallet)}</code>)
+                      )}
                     </td>
                     <td className="p-1">
                       {trade.kind === "open" ? "Opened" : "Closed"} {market?.coin ?? `#${trade.instrumentId}`}{" "}
                       {trade.isLong ? "long" : "short"}
+                      {trade.copiedFromName && ` (copying ${trade.copiedFromName})`}
                     </td>
                     <td className="p-1">
                       {formatUsd(trade.marginRaw)} × {trade.leverage}
                     </td>
-                    <td className="p-1">{statusText(trade, market?.priceScale)}</td>
+                    <td className="p-1">{statusText(trade, market?.priceScale, trade.wallet === wallet)}</td>
                   </tr>
                 );
               })}
@@ -53,9 +58,11 @@ export function TradeFeed({ trades, wallet }: { trades: Trade[]; wallet: string 
   );
 }
 
-function statusText(trade: Trade, priceScale: number | undefined) {
+function statusText(trade: Trade, priceScale: number | undefined, own: boolean) {
   if (trade.status === "submitted") return "Pending";
   if (trade.status === "not_filled") return "Not filled";
+  // The reason is written for the copier ("You don't have enough…"), so only they see it.
+  if (trade.status === "rejected") return own && trade.error ? `Rejected: ${trade.error}` : "Rejected";
   if (trade.kind === "close") return "Filled";
   return trade.entryPriceRaw !== null && priceScale
     ? `Filled at ${formatPrice(trade.entryPriceRaw / priceScale, priceScale)}`

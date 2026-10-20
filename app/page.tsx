@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { formatPrice, formatUsd } from "@/lib/format";
+import { listTraders } from "@/lib/copying";
 import { readAccount, type Account } from "@/lib/papertrade/account";
 import {
   SESSION_KEY_MIN_REMAINING_SEC,
@@ -10,11 +11,13 @@ import { currentSession } from "@/lib/session";
 import { recentTrades } from "@/lib/trades";
 import { Trade, type TradeView } from "./trade";
 import { TradeFeed } from "./trade-feed";
+import { Traders } from "./traders";
 import { WalletSession, type SessionView } from "./wallet-session";
 
 export default function Home() {
+  // pt-16 keeps content clear of the fixed price header.
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 pt-16 pb-8">
       <h1>capypaper</h1>
       <Suspense fallback={<p>Loading…</p>}>
         <Session />
@@ -29,9 +32,10 @@ async function Session() {
 
   // Papertrade is the source of truth for the key's expiry; fall back to the last
   // confirmed one if it can't be reached.
-  const [account, trades] = await Promise.all([
+  const [account, trades, traders] = await Promise.all([
     readAccount(session.wallet).catch(() => null),
     recentTrades(),
+    listTraders(session.wallet),
   ]);
   const expiry = account
     ? account.sessionKeys.get(session.sessionKeyAddress)
@@ -50,6 +54,7 @@ async function Session() {
         }}
       />
       {canTrade && <Trade view={tradeView(account)} />}
+      <Traders traders={traders} viewer={session.wallet} />
       <TradeFeed trades={trades} wallet={session.wallet} />
     </>
   );
