@@ -31,9 +31,14 @@ Deployment Notes instead of silently shipping the feature.
 - **Follow-ups live in the code as `TODO` comments.** If a PR description notes a follow-up that is
   required or recommended (but out of scope for this PR), also leave a `TODO:` comment at the relevant
   spot in the code describing it, so it isn't forgotten while the PR stays one feature.
-- **Each PR is complete, not half-plumbing** — the code/API/UI *and* a working path. No dead code.
+- **Each PR is complete, not half-plumbing** — its migration *and* the code/API/UI that uses it *and* a
+  working path. No dead schema.
+- **Migrations created incrementally — only what the current PR needs.** Never scaffold a phase's
+  migrations up front. Number sequentially (`0002_…`) in PR-merge order.
+- **Migrations are append-only** — never edit a merged migration; write a new one.
 - **Chain PRs as necessary** - if someone can't review right away, chain off each other instead of waiting otherwise try to make each PR off latest origin main
-- **Fill the PR template's Deployment Notes** — environment variables or other setup needed?
+- **Fill the PR template's Deployment Notes** — migration/env needed? migration run? (`supabase db
+  push` as part of merging).
 - **Keep PRs reviewable** — small enough to read in one sitting.
 - **Plain commit messages — no AI-attribution trailers.** Subject + body only. Never append any AI/assistant attribution to a commit.
 - **Graduate to review, don't merge** — open each PR for review (`gh pr ready`) and stack dependents on
