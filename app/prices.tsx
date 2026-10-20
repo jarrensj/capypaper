@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatPrice } from "@/lib/format";
 import { MARKETS, type Coin } from "@/lib/papertrade/markets";
 
 // Papertrade prices against HyperCore's book, so stream its best bid/offer.
@@ -123,12 +124,4 @@ function parseBbo(raw: string) {
   const scale = market.priceScale;
   const mid = Math.floor((Math.round(bid * scale) + Math.round(ask * scale)) / 2) / scale;
   return { coin: market.coin, bid, ask, mid };
-}
-
-function formatPrice(price: number, priceScale: number) {
-  const digits = Math.round(Math.log10(priceScale));
-  return price.toLocaleString("en-US", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
 }

@@ -1,10 +1,13 @@
 import { Suspense } from "react";
-import { readAccount } from "@/lib/papertrade/account";
+import { formatPrice, formatUsd } from "@/lib/format";
+import { readAccount, type Account } from "@/lib/papertrade/account";
 import {
   SESSION_KEY_MIN_REMAINING_SEC,
   SESSION_KEY_RENEW_WITHIN_SEC,
 } from "@/lib/papertrade/config";
+import { MARKETS } from "@/lib/papertrade/markets";
 import { currentSession } from "@/lib/session";
+import { Trade, type TradeView } from "./trade";
 import { WalletSession, type SessionView } from "./wallet-session";
 
 export default function Home() {
@@ -29,16 +32,44 @@ async function Session() {
     ? account.sessionKeys.get(session.sessionKeyAddress)
     : session.expiresAt && session.expiresAt.getTime() / 1000;
 
+  const status = sessionStatus(expiry ?? null, session.expiresAt === null);
+  const canTrade = account !== null && (status === "active" || status === "renew-soon");
   return (
-    <WalletSession
-      session={{
-        wallet: session.wallet,
-        status: sessionStatus(expiry ?? null, session.expiresAt === null),
-        expiresLabel: expiry ? formatUtc(expiry) : null,
-        stale: account === null,
-      }}
-    />
+    <>
+      <WalletSession
+        session={{
+          wallet: session.wallet,
+          status,
+          expiresLabel: expiry ? formatUtc(expiry) : null,
+          stale: account === null,
+        }}
+      />
+      {canTrade && <Trade view={tradeView(account)} />}
+    </>
   );
+}
+
+function tradeView(account: Account): TradeView {
+  return {
+    availableBalance: formatUsd(account.availableBalance),
+    queued: account.operations.length,
+    positions: account.openPositions.flatMap((p) => {
+      const market = MARKETS.find((m) => m.instrumentId === p.instrumentId);
+      if (!market) return [];
+      return [
+        {
+          positionId: p.positionId,
+          intentId: p.intentId,
+          coin: market.coin,
+          side: p.isLong ? "Long" : "Short",
+          margin: formatUsd(p.marginRaw),
+          leverage: p.leverage,
+          entry: formatPrice(p.entryPriceRaw / market.priceScale, market.priceScale),
+          liquidation: formatPrice(p.bustPriceRaw / market.priceScale, market.priceScale),
+        },
+      ];
+    }),
+  };
 }
 
 function sessionStatus(expiry: number | null, neverConfirmed: boolean): SessionView["status"] {

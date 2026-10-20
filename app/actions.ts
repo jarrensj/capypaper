@@ -5,7 +5,7 @@ import { isAddress, isHex, type Address } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { decryptCookie, encryptCookie, encryptSessionKey } from "@/lib/crypto";
 import { readAccount } from "@/lib/papertrade/account";
-import { RelayerError, submitIntent } from "@/lib/papertrade/relayer";
+import { relayerErrorMessage, submitIntent } from "@/lib/papertrade/relayer";
 import {
   registerSessionKeyMessage,
   registerSessionKeyTypedData,
@@ -136,26 +136,4 @@ export async function disconnect() {
   const session = await currentSession();
   if (session) await deleteSession(session.wallet);
   await deleteSessionCookie();
-}
-
-function relayerErrorMessage(error: unknown) {
-  if (!(error instanceof RelayerError)) {
-    return "Couldn't reach papertrade. Try again in a minute.";
-  }
-  switch (error.reason ?? error.code) {
-    case "noDeposit":
-      return "Deposit at least 10 USDC on papertrade before connecting.";
-    case "sessionKeyLimit":
-      return "This wallet has too many papertrade session keys. Revoke one on papertrade, then try again.";
-    case "alreadyQueued":
-      return "A registration for this wallet is already queued. Wait a minute, then refresh.";
-    case "unauthorized_intent":
-      return "Papertrade rejected the signature.";
-    case "deadline_expired":
-      return "The request expired before it reached papertrade. Try again.";
-    case "rate_limited":
-      return "Papertrade is rate limiting requests. Try again in a minute.";
-    default:
-      return `Papertrade rejected the registration (${error.message}).`;
-  }
 }

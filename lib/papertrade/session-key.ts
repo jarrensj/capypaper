@@ -7,20 +7,8 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import {
-  CHAIN_ID,
-  EXCHANGE,
-  INTENT_TTL_SEC,
-  SESSION_KEY_TTL_SEC,
-} from "./config";
-
-// "String" really is the domain name papertrade's contracts verify against.
-const DOMAIN = {
-  name: "String",
-  version: "1",
-  chainId: CHAIN_ID,
-  verifyingContract: EXCHANGE,
-} as const;
+import { INTENT_TTL_SEC, SESSION_KEY_TTL_SEC } from "./config";
+import { DOMAIN } from "./intents";
 
 const REGISTER_SESSION_KEY = [
   { name: "user", type: "address" },
