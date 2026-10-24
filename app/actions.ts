@@ -1,10 +1,11 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { isAddress, isHex, type Address } from "viem";
+import { isAddress, isHex, zeroAddress, type Address } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { decryptCookie, encryptCookie, encryptSessionKey } from "@/lib/crypto";
 import { readAccount } from "@/lib/papertrade/account";
+import { builderFee } from "@/lib/papertrade/builder";
 import { relayerErrorMessage, submitIntent } from "@/lib/papertrade/relayer";
 import {
   registerSessionKeyMessage,
@@ -59,7 +60,12 @@ export async function prepareConnect(
     encryptedSessionKey = encryptSessionKey(privateKey, wallet);
   }
 
-  const message = registerSessionKeyMessage(wallet, sessionKeyAddress as Address);
+  const fee = await builderFee();
+  const message = registerSessionKeyMessage(
+    wallet,
+    sessionKeyAddress as Address,
+    fee?.address ?? zeroAddress,
+  );
   const pending: Pending = {
     message,
     encryptedSessionKey,

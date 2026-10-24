@@ -26,7 +26,14 @@ type Ethereum = {
 const CONFIRM_POLL_MS = 2000;
 const CONFIRM_TIMEOUT_MS = 90_000;
 
-export function WalletSession({ session }: { session: SessionView | null }) {
+export function WalletSession({
+  session,
+  builderFeeRate,
+}: {
+  session: SessionView | null;
+  /** Papertrade's builder fee, e.g. "0.5%", when the key being signed names capypaper as its builder. */
+  builderFeeRate: string | null;
+}) {
   const [step, setStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
@@ -76,6 +83,13 @@ export function WalletSession({ session }: { session: SessionView | null }) {
             and close positions for you, but it can&apos;t withdraw.
           </p>
         </>
+      )}
+      {builderFeeRate && (
+        <p className="text-sm">
+          The session key you sign names capypaper as its papertrade builder, so positions it closes,
+          copied ones included, pay capypaper {builderFeeRate} of the profit on a win. Losses and
+          liquidations cost you nothing extra.
+        </p>
       )}
       {step && <p role="status">{step}</p>}
       {error && <p role="alert">{error}</p>}

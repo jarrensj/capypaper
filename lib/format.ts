@@ -14,6 +14,14 @@ export function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+/** An 18-decimal fraction, e.g. "0.5%". */
+export function formatPercent(raw: bigint) {
+  return Number(formatUnits(raw, 18)).toLocaleString("en-US", {
+    style: "percent",
+    maximumFractionDigits: 2,
+  });
+}
+
 /** An 18-decimal USD amount, e.g. "$1,234.56". */
 export function formatUsd(raw: bigint) {
   return Number(formatUnits(raw, 18)).toLocaleString("en-US", {

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { formatPrice, formatUsd } from "@/lib/format";
 import { listTraders } from "@/lib/copying";
 import { readAccount, type Account } from "@/lib/papertrade/account";
+import { builderFee } from "@/lib/papertrade/builder";
 import {
   SESSION_KEY_MIN_REMAINING_SEC,
   SESSION_KEY_RENEW_WITHIN_SEC,
@@ -28,14 +29,18 @@ export default function Home() {
 
 async function Session() {
   const session = await currentSession();
-  if (!session) return <WalletSession session={null} />;
+  if (!session) {
+    const fee = await builderFee();
+    return <WalletSession session={null} builderFeeRate={fee?.rate ?? null} />;
+  }
 
   // Papertrade is the source of truth for the key's expiry; fall back to the last
   // confirmed one if it can't be reached.
-  const [account, trades, traders] = await Promise.all([
+  const [account, trades, traders, fee] = await Promise.all([
     readAccount(session.wallet).catch(() => null),
     recentTrades(),
     listTraders(session.wallet),
+    builderFee(),
   ]);
   const expiry = account
     ? account.sessionKeys.get(session.sessionKeyAddress)
@@ -52,6 +57,7 @@ async function Session() {
           expiresLabel: expiry ? formatUtc(expiry) : null,
           stale: account === null,
         }}
+        builderFeeRate={fee?.rate ?? null}
       />
       {canTrade && <Trade view={tradeView(account)} />}
       <Traders traders={traders} viewer={session.wallet} />
