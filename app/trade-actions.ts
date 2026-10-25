@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { parseUnits, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { decryptSessionKey } from "@/lib/crypto";
@@ -8,14 +9,13 @@ import { signIntent } from "@/lib/papertrade/intents";
 import { MARKETS } from "@/lib/papertrade/markets";
 import { relayerErrorMessage, submitIntent } from "@/lib/papertrade/relayer";
 import { currentSession, reserveNonce } from "@/lib/session";
+import { recordTrade, settleTrades } from "@/lib/trades";
 
 // Short deadlines so an order stuck in the relayer's queue doesn't fill long
 // after the price it was placed at.
 const OPEN_DEADLINE_SEC = 60;
 const CLOSE_DEADLINE_SEC = 300;
 const MAX_LEVERAGE = 1000;
-// The relayer takes at most this many positions per close.
-const MAX_CLOSE_IDS = 12;
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -38,47 +38,87 @@ export async function openPosition(order: {
   const key = await tradingKey(OPEN_DEADLINE_SEC);
   if (!key.ok) return key;
 
-  const signed = await signIntent(key.signer, "OpenPosition", {
+  const size = parseUnits(order.margin, 18);
+  const orderDeadline = deadline(OPEN_DEADLINE_SEC);
+  const { signed, intentId } = await signIntent(key.signer, "OpenPosition", {
     user: key.wallet,
     instrumentId: market.instrumentId,
     isLong: order.isLong,
-    size: parseUnits(order.margin, 18),
+    size,
     leverage: order.leverage,
     useDebt: false,
     nonce: await reserveNonce(key.wallet),
-    deadline: deadline(OPEN_DEADLINE_SEC),
+    deadline: orderDeadline,
   });
+  let accepted: string;
   try {
-    return { ok: true, intentId: (await submitIntent("openPosition", signed)) ?? null };
+    accepted = (await submitIntent("openPosition", signed)) ?? intentId;
   } catch (error) {
     return { ok: false, error: relayerErrorMessage(error) };
   }
+  await logTrade({
+    intentId: accepted,
+    wallet: key.wallet,
+    kind: "open",
+    instrumentId: market.instrumentId,
+    isLong: order.isLong,
+    marginRaw: size,
+    leverage: order.leverage,
+    deadline: new Date(Number(orderDeadline) * 1000),
+  });
+  return { ok: true, intentId: accepted };
 }
 
-/** Closes positions in full; papertrade doesn't do partial closes. */
-export async function closePositions(positionIds: string[]): Promise<Result<object>> {
-  if (positionIds.length < 1 || positionIds.length > MAX_CLOSE_IDS) {
-    return { ok: false, error: `Close between 1 and ${MAX_CLOSE_IDS} positions at a time.` };
-  }
-
+/** Closes a position in full; papertrade doesn't do partial closes. */
+export async function closePosition(positionId: string): Promise<Result<object>> {
   const key = await tradingKey(CLOSE_DEADLINE_SEC);
   if (!key.ok) return key;
-  const open = new Set(key.openPositionIds);
-  if (!positionIds.every((id) => open.has(id))) {
+  const position = key.account.openPositions.find((p) => p.positionId === positionId);
+  if (!position) {
     return { ok: false, error: "That position is already closed. Refresh to see your positions." };
   }
+  if (key.account.operations.some((op) => op.closeIds.includes(positionId))) {
+    return { ok: false, error: "That position is already being closed. Wait a minute, then refresh." };
+  }
+  // This snapshot still has the position, so settling from it logs the open that
+  // created it as filled, even if no earlier settle saw the position.
+  after(() =>
+    settleTrades(key.wallet, key.account).catch((error) => console.error("couldn't settle trades", error)),
+  );
 
-  const signed = await signIntent(key.signer, "Close", {
+  const orderDeadline = deadline(CLOSE_DEADLINE_SEC);
+  const { signed, intentId } = await signIntent(key.signer, "Close", {
     user: key.wallet,
-    positionIds: positionIds.map(BigInt),
+    positionIds: [BigInt(positionId)],
     nonce: await reserveNonce(key.wallet),
-    deadline: deadline(CLOSE_DEADLINE_SEC),
+    deadline: orderDeadline,
   });
+  let accepted: string;
   try {
-    await submitIntent("closePositions", signed);
-    return { ok: true };
+    accepted = (await submitIntent("closePositions", signed)) ?? intentId;
   } catch (error) {
     return { ok: false, error: relayerErrorMessage(error) };
+  }
+  await logTrade({
+    intentId: accepted,
+    wallet: key.wallet,
+    kind: "close",
+    instrumentId: position.instrumentId,
+    isLong: position.isLong,
+    marginRaw: position.marginRaw,
+    leverage: position.leverage,
+    positionId,
+    deadline: new Date(Number(orderDeadline) * 1000),
+  });
+  return { ok: true };
+}
+
+/** The order is already with papertrade, so a logging failure mustn't fail the request. */
+async function logTrade(trade: Parameters<typeof recordTrade>[0]) {
+  try {
+    await recordTrade(trade);
+  } catch (error) {
+    console.error("couldn't log trade", trade.intentId, error);
   }
 }
 
@@ -102,7 +142,7 @@ async function tradingKey(deadlineSec: number) {
     ok: true as const,
     wallet: session.wallet as Hex,
     signer: privateKeyToAccount(privateKey as Hex),
-    openPositionIds: account.openPositions.map((p) => p.positionId),
+    account,
   };
 }
 

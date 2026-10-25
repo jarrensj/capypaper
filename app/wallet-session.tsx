@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { shortAddress } from "@/lib/format";
 import { HYPEREVM } from "@/lib/papertrade/config";
 import {
   completeConnect,
@@ -145,8 +146,4 @@ function statusText(session: SessionView) {
     pending: "Waiting for papertrade to confirm your session key.",
   }[session.status];
   return session.stale ? `${text} (Couldn't reach papertrade, so this may be out of date.)` : text;
-}
-
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }

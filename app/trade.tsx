@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MARKETS } from "@/lib/papertrade/markets";
-import { closePositions, openPosition } from "./trade-actions";
+import { closePosition, openPosition } from "./trade-actions";
 
 export type PositionView = {
   positionId: string;
@@ -80,7 +80,7 @@ export function Trade({ view }: { view: TradeView }) {
 
   function close(positionId: string) {
     submit(async () => {
-      const result = await closePositions([positionId]);
+      const result = await closePosition(positionId);
       return result.ok ? { ok: true, awaiting: { kind: "close", positionIds: [positionId] } } : result;
     });
   }
@@ -145,7 +145,7 @@ export function Trade({ view }: { view: TradeView }) {
         <p>No open positions.</p>
       ) : (
         <div className="w-full overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-label="Open positions">
             <thead>
               <tr className="text-left">
                 <th className="p-1">Market</th>

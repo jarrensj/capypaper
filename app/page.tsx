@@ -7,7 +7,9 @@ import {
 } from "@/lib/papertrade/config";
 import { MARKETS } from "@/lib/papertrade/markets";
 import { currentSession } from "@/lib/session";
+import { recentTrades, settleTrades } from "@/lib/trades";
 import { Trade, type TradeView } from "./trade";
+import { TradeFeed } from "./trade-feed";
 import { WalletSession, type SessionView } from "./wallet-session";
 
 export default function Home() {
@@ -28,6 +30,16 @@ async function Session() {
   // Papertrade is the source of truth for the key's expiry; fall back to the last
   // confirmed one if it can't be reached.
   const account = await readAccount(session.wallet).catch(() => null);
+  // Settle from the snapshot this render shows, so the feed and the trade panel agree.
+  if (account) {
+    await settleTrades(session.wallet, account).catch((error) =>
+      console.error("couldn't settle trades", error),
+    );
+  }
+  const trades = await recentTrades().catch((error) => {
+    console.error("couldn't load recent trades", error);
+    return null;
+  });
   const expiry = account
     ? account.sessionKeys.get(session.sessionKeyAddress)
     : session.expiresAt && session.expiresAt.getTime() / 1000;
@@ -45,6 +57,7 @@ async function Session() {
         }}
       />
       {canTrade && <Trade view={tradeView(account)} />}
+      <TradeFeed trades={trades} wallet={session.wallet} />
     </>
   );
 }
