@@ -38,8 +38,8 @@ async function Session() {
   // confirmed one if it can't be reached.
   const [account, trades, traders, fee] = await Promise.all([
     readAccount(session.wallet).catch(() => null),
-    recentTrades(),
-    listTraders(session.wallet),
+    recentTrades().catch(() => null),
+    listTraders(session.wallet).catch(() => null),
     builderFee(),
   ]);
   const expiry = account

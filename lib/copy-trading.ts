@@ -23,6 +23,8 @@ export async function isListedTrader(wallet: string) {
  * Places the same open for everyone copying `trader` whose session stays active
  * past the order's deadline. Copies don't trigger further copies.
  */
+// TODO: size copies per copier (e.g. a fixed amount or a share of their balance)
+// instead of reusing the trader's margin, so copiers with less balance aren't rejected.
 export async function copyOpen(
   trader: string,
   leaderIntentId: string,

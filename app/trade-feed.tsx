@@ -5,13 +5,17 @@ import { AutoRefresh } from "./auto-refresh";
 
 const FEED_REFRESH_MS = 10_000;
 
-/** Recent trades placed through capypaper, for signed-in visitors. */
-export function TradeFeed({ trades, wallet }: { trades: Trade[]; wallet: string }) {
+/** Recent trades placed through capypaper, for signed-in visitors. Null trades means they couldn't be loaded. */
+// TODO: once capypaper has a Privacy Policy, say there that signed-in users see each
+// other's trades with shortened wallet addresses.
+export function TradeFeed({ trades, wallet }: { trades: Trade[] | null; wallet: string }) {
   return (
     <section className="flex w-full max-w-2xl flex-col items-center gap-2 px-4">
       <AutoRefresh everyMs={FEED_REFRESH_MS} />
       <h2>Recent trades on capypaper</h2>
-      {trades.length === 0 ? (
+      {trades === null ? (
+        <p className="text-sm">Couldn&apos;t load recent trades.</p>
+      ) : trades.length === 0 ? (
         <p className="text-sm">No trades yet.</p>
       ) : (
         <div className="w-full overflow-x-auto">
