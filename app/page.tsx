@@ -6,6 +6,7 @@ import {
   SESSION_KEY_RENEW_WITHIN_SEC,
 } from "@/lib/papertrade/config";
 import { MARKETS } from "@/lib/papertrade/markets";
+import { cancelClosesForClosedPositions, listLimitOrders, type LimitOrder } from "@/lib/limit-orders";
 import { currentSession } from "@/lib/session";
 import { recentTrades, settleTrades } from "@/lib/trades";
 import { Trade, type TradeView } from "./trade";
@@ -32,14 +33,23 @@ async function Session() {
   const account = await readAccount(session.wallet).catch(() => null);
   // Settle from the snapshot this render shows, so the feed and the trade panel agree.
   if (account) {
-    await settleTrades(session.wallet, account).catch((error) =>
-      console.error("couldn't settle trades", error),
-    );
+    await Promise.all([
+      settleTrades(session.wallet, account).catch((error) => console.error("couldn't settle trades", error)),
+      cancelClosesForClosedPositions(session.wallet, account).catch((error) =>
+        console.error("couldn't cancel limit closes", error),
+      ),
+    ]);
   }
-  const trades = await recentTrades().catch((error) => {
-    console.error("couldn't load recent trades", error);
-    return null;
-  });
+  const [trades, limitOrders] = await Promise.all([
+    recentTrades().catch((error) => {
+      console.error("couldn't load recent trades", error);
+      return null;
+    }),
+    listLimitOrders(session.wallet).catch((error) => {
+      console.error("couldn't load limit orders", error);
+      return null;
+    }),
+  ]);
   const expiry = account
     ? account.sessionKeys.get(session.sessionKeyAddress)
     : session.expiresAt && session.expiresAt.getTime() / 1000;
@@ -56,16 +66,35 @@ async function Session() {
           stale: account === null,
         }}
       />
-      {canTrade && <Trade view={tradeView(account)} />}
+      {canTrade && <Trade view={tradeView(account, limitOrders)} />}
       <TradeFeed trades={trades} wallet={session.wallet} />
     </>
   );
 }
 
-function tradeView(account: Account): TradeView {
+function tradeView(account: Account, limitOrders: LimitOrder[] | null): TradeView {
   return {
     availableBalance: formatUsd(account.availableBalance),
     queued: account.operations.length,
+    limitOrders:
+      limitOrders &&
+      limitOrders.flatMap((o) => {
+        const market = MARKETS.find((m) => m.instrumentId === o.instrumentId);
+        if (!market) return [];
+        return [
+          {
+            id: o.id,
+            kind: o.kind,
+            coin: market.coin,
+            isLong: o.isLong,
+            limitPriceRaw: o.limitPriceRaw,
+            limit: formatPrice(o.limitPriceRaw / market.priceScale, market.priceScale),
+            size: `${formatUsd(o.marginRaw)} × ${o.leverage}`,
+            status: o.status,
+            error: o.error,
+          },
+        ];
+      }),
     positions: account.openPositions.flatMap((p) => {
       const market = MARKETS.find((m) => m.instrumentId === p.instrumentId);
       if (!market) return [];
