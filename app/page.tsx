@@ -35,7 +35,7 @@ async function Session() {
   const [account, trades, traders] = await Promise.all([
     readAccount(session.wallet).catch(() => null),
     recentTrades().catch(() => null),
-    listTraders(session.wallet),
+    listTraders(session.wallet).catch(() => null),
   ]);
   const expiry = account
     ? account.sessionKeys.get(session.sessionKeyAddress)

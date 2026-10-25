@@ -6,8 +6,10 @@ import { toggleCopying } from "./copy-actions";
 
 export type TraderView = { wallet: string; displayName: string; copying: boolean };
 
-/** Listed traders, each with a toggle to copy their trades. */
-export function Traders({ traders, viewer }: { traders: TraderView[]; viewer: string }) {
+/** Listed traders, each with a toggle to copy their trades. Null traders means they couldn't be loaded. */
+// TODO: once capypaper has Terms of Service, spell out there that while copying is
+// on, capypaper places trades in the copier's account automatically.
+export function Traders({ traders, viewer }: { traders: TraderView[] | null; viewer: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pendingWallet, setPendingWallet] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -25,7 +27,9 @@ export function Traders({ traders, viewer }: { traders: TraderView[]; viewer: st
   return (
     <section className="flex w-full max-w-2xl flex-col items-center gap-2 px-4">
       <h2>Traders</h2>
-      {traders.length === 0 ? (
+      {traders === null ? (
+        <p className="text-sm">Couldn&apos;t load traders.</p>
+      ) : traders.length === 0 ? (
         <p className="text-sm">No traders listed yet.</p>
       ) : (
         <ul className="flex w-full flex-col gap-2" aria-label="Traders">
