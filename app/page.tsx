@@ -34,7 +34,7 @@ async function Session() {
   // confirmed one if it can't be reached.
   const [account, trades, traders] = await Promise.all([
     readAccount(session.wallet).catch(() => null),
-    recentTrades(),
+    recentTrades().catch(() => null),
     listTraders(session.wallet),
   ]);
   const expiry = account
