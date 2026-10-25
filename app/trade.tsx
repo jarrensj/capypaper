@@ -1,8 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MARKETS } from "@/lib/papertrade/markets";
-import { closePosition, openPosition, syncAccount } from "./trade-actions";
+import { closePosition, openPosition } from "./trade-actions";
 
 export type PositionView = {
   positionId: string;
@@ -31,6 +32,7 @@ const REFRESH_EVERY_MS = 2000;
 const SETTLE_TIMEOUT_MS = 75_000;
 
 export function Trade({ view }: { view: TradeView }) {
+  const router = useRouter();
   const [coin, setCoin] = useState<string>(MARKETS[0].coin);
   const [margin, setMargin] = useState("10");
   const [leverage, setLeverage] = useState("100");
@@ -46,9 +48,9 @@ export function Trade({ view }: { view: TradeView }) {
   // Re-read the account until papertrade settles the order.
   useEffect(() => {
     if (!waiting) return;
-    const timer = setTimeout(() => void syncAccount(), REFRESH_EVERY_MS);
+    const timer = setTimeout(() => router.refresh(), REFRESH_EVERY_MS);
     return () => clearTimeout(timer);
-  }, [waiting, view]);
+  }, [waiting, view, router]);
 
   function submit(next: () => Promise<{ ok: true; awaiting: Awaiting } | { ok: false; error: string }>) {
     setError(null);

@@ -1,6 +1,6 @@
 "use server";
 
-import { refresh } from "next/cache";
+import { after } from "next/server";
 import { parseUnits, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { decryptSessionKey } from "@/lib/crypto";
@@ -73,10 +73,18 @@ export async function openPosition(order: {
 export async function closePosition(positionId: string): Promise<Result<object>> {
   const key = await tradingKey(CLOSE_DEADLINE_SEC);
   if (!key.ok) return key;
-  const position = key.openPositions.find((p) => p.positionId === positionId);
+  const position = key.account.openPositions.find((p) => p.positionId === positionId);
   if (!position) {
     return { ok: false, error: "That position is already closed. Refresh to see your positions." };
   }
+  if (key.account.operations.some((op) => op.closeIds.includes(positionId))) {
+    return { ok: false, error: "That position is already being closed. Wait a minute, then refresh." };
+  }
+  // This snapshot still has the position, so settling from it logs the open that
+  // created it as filled, even if no earlier settle saw the position.
+  after(() =>
+    settleTrades(key.wallet, key.account).catch((error) => console.error("couldn't settle trades", error)),
+  );
 
   const orderDeadline = deadline(CLOSE_DEADLINE_SEC);
   const { signed, intentId } = await signIntent(key.signer, "Close", {
@@ -103,20 +111,6 @@ export async function closePosition(positionId: string): Promise<Result<object>>
     deadline: new Date(Number(orderDeadline) * 1000),
   });
   return { ok: true };
-}
-
-/** Settles the signed-in wallet's logged trades against its account, then refreshes the page. */
-export async function syncAccount() {
-  const session = await currentSession();
-  const account = session && (await readAccount(session.wallet).catch(() => null));
-  // Refresh even if settling fails (e.g. the trades table isn't there yet), since the
-  // trade panel only polls again once the page re-renders.
-  if (session && account) {
-    await settleTrades(session.wallet, account).catch((error) =>
-      console.error("couldn't settle trades", error),
-    );
-  }
-  refresh();
 }
 
 /** The order is already with papertrade, so a logging failure mustn't fail the request. */
@@ -148,7 +142,7 @@ async function tradingKey(deadlineSec: number) {
     ok: true as const,
     wallet: session.wallet as Hex,
     signer: privateKeyToAccount(privateKey as Hex),
-    openPositions: account.openPositions,
+    account,
   };
 }
 

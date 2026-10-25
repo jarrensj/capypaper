@@ -64,6 +64,10 @@ export async function settleTrades(wallet: string, account: Account) {
   // have settled it from a newer snapshot in the meantime.
   for (const trade of pending) {
     const queued = account.operations.some((op) => op.intentId === trade.intentId);
+    // TODO: a close whose position was liquidated first is logged as filled, and an open
+    // liquidated before any settle saw it as not_filled. Settle from the per-intent
+    // outcomes and closedPositions[].liquidated in papertrade's account stream patches,
+    // which readAccount skips today.
     if (trade.kind === "open") {
       const position = account.openPositions.find((p) => p.intentId === trade.intentId);
       if (position) {
@@ -82,6 +86,9 @@ export async function settleTrades(wallet: string, account: Account) {
       `;
       continue;
     }
+    // TODO: wait a grace period past the deadline (or until papertrade's
+    // indexedThroughTimestamp passes it) before deciding. A snapshot can lag the chain,
+    // and this decision is final.
     if (!queued && trade.deadline.getTime() < now) {
       await sql`
         update trades set status = 'not_filled', settled_at = now()
