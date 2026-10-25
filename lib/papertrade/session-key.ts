@@ -1,12 +1,6 @@
 import "server-only";
 
-import {
-  parseSignature,
-  verifyTypedData,
-  zeroAddress,
-  type Address,
-  type Hex,
-} from "viem";
+import { parseSignature, verifyTypedData, type Address, type Hex } from "viem";
 import { INTENT_TTL_SEC, SESSION_KEY_TTL_SEC } from "./config";
 import { DOMAIN } from "./intents";
 
@@ -36,16 +30,18 @@ function randomNonce() {
   return BigInt(word || 1) * BigInt(256);
 }
 
+/** `feeAddress` is the builder the key's closes pay, or the zero address for none. */
 export function registerSessionKeyMessage(
   wallet: Address,
   key: Address,
+  feeAddress: Address,
   nowSec = Math.floor(Date.now() / 1000),
 ): RegisterSessionKeyMessage {
   return {
     user: wallet.toLowerCase(),
     key: key.toLowerCase(),
     expiry: String(nowSec + SESSION_KEY_TTL_SEC),
-    feeAddress: zeroAddress,
+    feeAddress: feeAddress.toLowerCase(),
     nonce: randomNonce().toString(),
     deadline: String(nowSec + INTENT_TTL_SEC),
   };
