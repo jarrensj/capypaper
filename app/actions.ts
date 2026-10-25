@@ -64,6 +64,10 @@ export async function prepareConnect(
   const existing = await findSession(wallet);
   let sessionKeyAddress: string;
   let encryptedSessionKey: string;
+  // TODO: once papertrade approves capypaper's builder, confirm that re-registering
+  // an existing key with a new feeAddress takes effect (a renewal should raise
+  // routing.sessionKeys in /query/builders/<address>/stats). If it doesn't, keys
+  // registered without the builder need a fresh key on renewal.
   if (existing) {
     sessionKeyAddress = existing.sessionKeyAddress;
     encryptedSessionKey = existing.encryptedSessionKey;
