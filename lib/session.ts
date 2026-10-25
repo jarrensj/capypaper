@@ -67,6 +67,23 @@ export async function saveExpiry(
   `;
 }
 
+/**
+ * Reserves the next trade nonce for the wallet. The counter starts at a random
+ * multiple of 256 (a fresh bitmap word), like papertrade's own app.
+ */
+export async function reserveNonce(wallet: string) {
+  const [a, b, c] = crypto.getRandomValues(new Uint8Array(3));
+  const start = ((a << 16) | (b << 8) | c || 1) * 256;
+  const [row] = await sql<{ nonce: string }[]>`
+    update wallet_sessions
+    set next_nonce = coalesce(next_nonce, ${start}) + 1
+    where wallet_address = ${wallet}
+    returning next_nonce - 1 as nonce
+  `;
+  if (!row) throw new Error("wallet session not found");
+  return BigInt(row.nonce);
+}
+
 export async function deleteSession(wallet: string) {
   await sql`delete from wallet_sessions where wallet_address = ${wallet}`;
 }

@@ -38,11 +38,15 @@ async function fetchBuildId() {
   }
 }
 
-/** Submits a signed intent to papertrade's relayer, which queues it and batches it onchain. */
+/**
+ * Submits a signed intent to papertrade's relayer, which queues it and batches it
+ * onchain. Returns the relayer's intent ID, which the account stream reports the
+ * intent under.
+ */
 export async function submitIntent(
-  action: "registerSessionKey",
+  action: "registerSessionKey" | "openPosition" | "closePositions",
   signed: Record<string, unknown>,
-) {
+): Promise<string | undefined> {
   const build = await appBuildId();
   const res = await fetch(`${PAPERTRADE_URL}/intents`, {
     method: "POST",
@@ -62,5 +66,45 @@ export async function submitIntent(
       body.error ??
       (res.status === 429 ? "rate_limited" : `http_${res.status}`);
     throw new RelayerError(String(code), body.reason ?? undefined);
+  }
+  return typeof body.intentId === "string" ? body.intentId.toLowerCase() : undefined;
+}
+
+/** A message for the person who made the request, for an error from submitIntent. */
+export function relayerErrorMessage(error: unknown) {
+  if (!(error instanceof RelayerError)) {
+    return "Couldn't reach papertrade. Try again in a minute.";
+  }
+  switch (error.reason ?? error.code) {
+    case "noDeposit":
+      return "Deposit at least 10 USDC on papertrade before connecting.";
+    case "sessionKeyLimit":
+      return "This wallet has too many papertrade session keys. Revoke one on papertrade, then try again.";
+    case "alreadyQueued":
+      return "That's already queued on papertrade. Wait a minute, then refresh.";
+    case "unauthorized_intent":
+      return "Papertrade rejected the signature. Renew your session and try again.";
+    case "deadline_expired":
+      return "The request expired before it reached papertrade. Try again.";
+    case "rate_limited":
+      return "Papertrade is rate limiting requests. Try again in a minute.";
+    case "intake_action_paused":
+      return "Papertrade has paused trading for now.";
+    case "belowMinimum":
+      return "Margin is below papertrade's minimum.";
+    case "belowMinimumNotional":
+      return "Margin × leverage is below papertrade's minimum position size.";
+    case "leverageTooHigh":
+      return "Leverage is above papertrade's maximum for this market.";
+    case "positionTooLarge":
+      return "That position is bigger than papertrade allows.";
+    case "openInterest":
+      return "That side of the market is at its open interest cap. Try a smaller size.";
+    case "funding":
+      return "You don't have enough available balance for that margin.";
+    case "noOpenPositions":
+      return "Those positions are already closed.";
+    default:
+      return `Papertrade rejected the request (${error.message}).`;
   }
 }

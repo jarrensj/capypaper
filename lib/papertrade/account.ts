@@ -2,9 +2,36 @@ import "server-only";
 
 import { PAPERTRADE_URL, USER_AGENT } from "./config";
 
+export type Position = {
+  positionId: string;
+  instrumentId: number;
+  isLong: boolean;
+  /** Prices in units of 1 / the market's priceScale. */
+  entryPriceRaw: number;
+  bustPriceRaw: number;
+  /** 18-decimal USD. */
+  marginRaw: bigint;
+  leverage: number;
+  openedAtMs: number;
+  /** The intent that opened the position (lowercase). */
+  intentId: string;
+};
+
+/** An intent the relayer has accepted but that hasn't settled onchain yet. */
+export type Operation = {
+  intentId: string;
+  action: string;
+  /** For closePositions, the positions being closed. */
+  closeIds: string[];
+};
+
 export type Account = {
   /** Registered session key address (lowercase) → expiry in unix seconds. */
   sessionKeys: Map<string, number>;
+  /** 18-decimal USD available to open positions with. */
+  availableBalance: bigint;
+  openPositions: Position[];
+  operations: Operation[];
 };
 
 /**
@@ -59,8 +86,16 @@ function parseEvent(block: string) {
   return { name, data: data.join("\n") };
 }
 
+type PositionTuple = [string, number, boolean, boolean, string, string, number, string, number, string];
+type OperationTuple = [string, string, ...unknown[]];
+
 function parseSnapshot(json: string): Account {
-  const snapshot = JSON.parse(json) as { sessionKeys?: [string, string][] };
+  const snapshot = JSON.parse(json) as {
+    sessionKeys?: [string, string][];
+    funds?: { availableBalance?: string };
+    openPositions?: PositionTuple[];
+    operations?: OperationTuple[];
+  };
   return {
     sessionKeys: new Map(
       (snapshot.sessionKeys ?? []).map(([key, expiry]) => [
@@ -68,5 +103,25 @@ function parseSnapshot(json: string): Account {
         Number(expiry),
       ]),
     ),
+    availableBalance: BigInt(snapshot.funds?.availableBalance ?? "0"),
+    openPositions: (snapshot.openPositions ?? []).map(
+      ([positionId, instrumentId, isLong, , entryPriceRaw, marginRaw, leverage, bustPriceRaw, openedAtMs, intentId]) => ({
+        positionId,
+        instrumentId,
+        isLong,
+        entryPriceRaw: Number(entryPriceRaw),
+        bustPriceRaw: Number(bustPriceRaw),
+        marginRaw: BigInt(marginRaw),
+        leverage,
+        openedAtMs,
+        intentId: String(intentId).toLowerCase(),
+      }),
+    ),
+    // [intentId, action, instrumentId, isLong, useDebt, amount, leverage, acceptedAtMs, deadline, closeIds]
+    operations: (snapshot.operations ?? []).map((op) => ({
+      intentId: op[0].toLowerCase(),
+      action: op[1],
+      closeIds: Array.isArray(op[9]) ? op[9].map(String) : [],
+    })),
   };
 }
