@@ -109,7 +109,13 @@ export async function closePosition(positionId: string): Promise<Result<object>>
 export async function syncAccount() {
   const session = await currentSession();
   const account = session && (await readAccount(session.wallet).catch(() => null));
-  if (session && account) await settleTrades(session.wallet, account);
+  // Refresh even if settling fails (e.g. the trades table isn't there yet), since the
+  // trade panel only polls again once the page re-renders.
+  if (session && account) {
+    await settleTrades(session.wallet, account).catch((error) =>
+      console.error("couldn't settle trades", error),
+    );
+  }
   refresh();
 }
 
