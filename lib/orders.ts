@@ -91,7 +91,13 @@ async function submitAndLog(
 ): Promise<Placed> {
   let placed: Placed;
   try {
-    placed = { ok: true, intentId: (await submitIntent(action, signed)) ?? intentId };
+    const relayedId = await submitIntent(action, signed);
+    // A mismatch means papertrade changed how it derives intent IDs, so an order
+    // logged under the derived ID would never settle as filled.
+    if (relayedId && relayedId !== intentId) {
+      console.warn("relayer's intent ID doesn't match the derived one", { relayedId, derivedId: intentId });
+    }
+    placed = { ok: true, intentId: relayedId ?? intentId };
   } catch (error) {
     placed = { ok: false, error: relayerErrorMessage(error) };
   }
