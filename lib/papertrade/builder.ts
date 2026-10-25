@@ -15,11 +15,22 @@ export type BuilderFee = {
 /**
  * capypaper's papertrade builder code, for session keys to name as their fee
  * address so the closes they sign pay capypaper the builder fee. Null when
- * PAPERTRADE_BUILDER_ADDRESS isn't set or papertrade doesn't approve it right
- * now, since papertrade refuses a registration that names an unapproved builder.
+ * PAPERTRADE_BUILDER_ADDRESS isn't set, papertrade doesn't approve it right now
+ * or papertrade can't be reached, since papertrade refuses a registration that
+ * names an unapproved builder.
  */
 // TODO: cover the builder fee in the Terms of Service once capypaper has one.
 export async function builderFee(): Promise<BuilderFee | null> {
+  try {
+    return await approvedBuilderFee();
+  } catch {
+    // A cached function that throws stores nothing, so the next call asks
+    // papertrade again rather than skipping the builder for a minute.
+    return null;
+  }
+}
+
+async function approvedBuilderFee(): Promise<BuilderFee | null> {
   "use cache";
   // Rechecked about once a minute, so a builder papertrade removes stops being
   // named soon after.
@@ -32,17 +43,13 @@ export async function builderFee(): Promise<BuilderFee | null> {
     return null;
   }
 
-  try {
-    const [stats, board] = await Promise.all([
-      getJson(`/query/builders/${address}/stats`),
-      getJson("/query/builders/leaderboard"),
-    ]);
-    if (stats.address !== address || stats.approved !== true) return null;
-    if (typeof board.feeRateRaw !== "string") return null;
-    return { address, rate: formatPercent(BigInt(board.feeRateRaw)) };
-  } catch {
-    return null;
-  }
+  const [stats, board] = await Promise.all([
+    getJson(`/query/builders/${address}/stats`),
+    getJson("/query/builders/leaderboard"),
+  ]);
+  if (stats.address !== address || stats.approved !== true) return null;
+  if (typeof board.feeRateRaw !== "string") return null;
+  return { address, rate: formatPercent(BigInt(board.feeRateRaw)) };
 }
 
 async function getJson(path: string) {

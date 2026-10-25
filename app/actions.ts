@@ -38,15 +38,28 @@ type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
  * Step 1 of connecting (or renewing): picks the wallet's session key, creating one
  * if it has none, and returns the registration for the wallet to sign. The key
  * and message travel back to completeConnect encrypted, so nothing is stored
- * until the wallet has signed.
+ * until the wallet has signed. `shownFeeRate` is the builder fee the page told the
+ * visitor about, if any.
  */
 export async function prepareConnect(
   address: string,
+  shownFeeRate: string | null,
 ): Promise<Result<{ typedData: ReturnType<typeof registerSessionKeyTypedData>; pending: string }>> {
   if (!isAddress(address)) {
     return { ok: false, error: "Your wallet returned an invalid address." };
   }
   const wallet = address.toLowerCase() as Address;
+
+  // The page may have loaded before capypaper's builder was approved or its rate
+  // changed. Never ask for a signature naming a fee the visitor wasn't shown.
+  const fee = await builderFee();
+  if (fee && fee.rate !== shownFeeRate) {
+    refresh();
+    return {
+      ok: false,
+      error: "capypaper's builder fee changed since this page loaded. Read the note, then try again.",
+    };
+  }
 
   const existing = await findSession(wallet);
   let sessionKeyAddress: string;
@@ -60,7 +73,6 @@ export async function prepareConnect(
     encryptedSessionKey = encryptSessionKey(privateKey, wallet);
   }
 
-  const fee = await builderFee();
   const message = registerSessionKeyMessage(
     wallet,
     sessionKeyAddress as Address,

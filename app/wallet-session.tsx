@@ -42,7 +42,7 @@ export function WalletSession({
     setError(null);
     startTransition(async () => {
       try {
-        await registerSessionKey(setStep);
+        await registerSessionKey(builderFeeRate, setStep);
       } catch (err) {
         setError(walletErrorMessage(err));
       } finally {
@@ -87,8 +87,9 @@ export function WalletSession({
       {builderFeeRate && (
         <p className="text-sm">
           The session key you sign names capypaper as its papertrade builder, so positions it closes,
-          copied ones included, pay capypaper {builderFeeRate} of the profit on a win. Losses and
-          liquidations cost you nothing extra.
+          copied ones included, pay capypaper {builderFeeRate} of the profit on a win. A loss costs
+          you no more, but {builderFeeRate} of it no longer earns PAPER. Liquidations pay no builder
+          fee.
         </p>
       )}
       {step && <p role="status">{step}</p>}
@@ -97,7 +98,10 @@ export function WalletSession({
   );
 }
 
-async function registerSessionKey(setStep: (step: string) => void) {
+async function registerSessionKey(
+  shownFeeRate: string | null,
+  setStep: (step: string) => void,
+) {
   const ethereum = (window as { ethereum?: Ethereum }).ethereum;
   if (!ethereum) {
     throw new Error("No wallet found. Install MetaMask or another browser wallet.");
@@ -109,7 +113,7 @@ async function registerSessionKey(setStep: (step: string) => void) {
   // Wallets only sign typed data for the chain they're on, and papertrade's is HyperEVM.
   await switchToHyperEvm(ethereum);
 
-  const prepared = await prepareConnect(address);
+  const prepared = await prepareConnect(address, shownFeeRate);
   if (!prepared.ok) throw new Error(prepared.error);
 
   setStep("Approve the session key in your wallet…");
