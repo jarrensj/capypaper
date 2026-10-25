@@ -50,6 +50,9 @@ export async function recordTrade(trade: {
  * Either is not_filled once its deadline passes without that, and it's no longer
  * queued.
  */
+// TODO: also settle in the background (e.g. a scheduled job over submitted trades),
+// so trades settle while the trader's page is closed and an open whose position
+// was closed before it settled isn't marked not_filled.
 export async function settleTrades(wallet: string, account: Account) {
   const pending = await sql<{ intentId: string; kind: TradeKind; positionId: string | null; deadline: Date }[]>`
     select intent_id as "intentId", kind, position_id::text as "positionId", deadline
@@ -57,6 +60,8 @@ export async function settleTrades(wallet: string, account: Account) {
     where wallet_address = ${wallet} and status = 'submitted'
   `;
   const now = Date.now();
+  // Each update checks the trade is still submitted, since another poll or tab may
+  // have settled it from a newer snapshot in the meantime.
   for (const trade of pending) {
     const queued = account.operations.some((op) => op.intentId === trade.intentId);
     if (trade.kind === "open") {
@@ -66,16 +71,22 @@ export async function settleTrades(wallet: string, account: Account) {
           update trades
           set status = 'filled', position_id = ${position.positionId},
             entry_price_raw = ${position.entryPriceRaw}, settled_at = now()
-          where intent_id = ${trade.intentId}
+          where intent_id = ${trade.intentId} and status = 'submitted'
         `;
         continue;
       }
     } else if (!queued && !account.openPositions.some((p) => p.positionId === trade.positionId)) {
-      await sql`update trades set status = 'filled', settled_at = now() where intent_id = ${trade.intentId}`;
+      await sql`
+        update trades set status = 'filled', settled_at = now()
+        where intent_id = ${trade.intentId} and status = 'submitted'
+      `;
       continue;
     }
     if (!queued && trade.deadline.getTime() < now) {
-      await sql`update trades set status = 'not_filled', settled_at = now() where intent_id = ${trade.intentId}`;
+      await sql`
+        update trades set status = 'not_filled', settled_at = now()
+        where intent_id = ${trade.intentId} and status = 'submitted'
+      `;
     }
   }
 }
