@@ -8,3 +8,8 @@ export const MARKETS = [
 ] as const;
 
 export type Coin = (typeof MARKETS)[number]["coin"];
+
+/** Papertrade's mid for a best bid and offer, in units of 1 / priceScale: integer division of the scaled prices. */
+export function midRaw(bid: number, ask: number, priceScale: number) {
+  return Math.floor((Math.round(bid * priceScale) + Math.round(ask * priceScale)) / 2);
+}

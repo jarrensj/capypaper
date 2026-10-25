@@ -1,12 +1,12 @@
 "use server";
 
 import { after } from "next/server";
-import { parseUnits, type Hex } from "viem";
+import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { decryptSessionKey } from "@/lib/crypto";
+import { parseOpenOrder, type OpenOrder } from "@/lib/open-order";
 import { readAccount } from "@/lib/papertrade/account";
 import { signIntent } from "@/lib/papertrade/intents";
-import { MARKETS } from "@/lib/papertrade/markets";
 import { relayerErrorMessage, submitIntent } from "@/lib/papertrade/relayer";
 import { currentSession, reserveNonce } from "@/lib/session";
 import { recordTrade, settleTrades } from "@/lib/trades";
@@ -15,30 +15,17 @@ import { recordTrade, settleTrades } from "@/lib/trades";
 // after the price it was placed at.
 const OPEN_DEADLINE_SEC = 60;
 const CLOSE_DEADLINE_SEC = 300;
-const MAX_LEVERAGE = 1000;
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 
-export async function openPosition(order: {
-  coin: string;
-  isLong: boolean;
-  /** USD, e.g. "25" or "12.50". */
-  margin: string;
-  leverage: number;
-}): Promise<Result<{ intentId: string | null }>> {
-  const market = MARKETS.find(({ coin }) => coin === order.coin);
-  if (!market) return { ok: false, error: "Pick BTC or ETH." };
-  if (!/^\d+(\.\d{1,6})?$/.test(order.margin) || Number(order.margin) <= 0) {
-    return { ok: false, error: "Enter the margin in USD, like 25 or 12.50." };
-  }
-  if (!Number.isInteger(order.leverage) || order.leverage < 1 || order.leverage > MAX_LEVERAGE) {
-    return { ok: false, error: `Leverage must be a whole number from 1 to ${MAX_LEVERAGE}.` };
-  }
+export async function openPosition(order: OpenOrder): Promise<Result<{ intentId: string }>> {
+  const parsed = parseOpenOrder(order);
+  if (!parsed.ok) return parsed;
+  const { market, size } = parsed;
 
   const key = await tradingKey(OPEN_DEADLINE_SEC);
   if (!key.ok) return key;
 
-  const size = parseUnits(order.margin, 18);
   const orderDeadline = deadline(OPEN_DEADLINE_SEC);
   const { signed, intentId } = await signIntent(key.signer, "OpenPosition", {
     user: key.wallet,
@@ -70,7 +57,7 @@ export async function openPosition(order: {
 }
 
 /** Closes a position in full; papertrade doesn't do partial closes. */
-export async function closePosition(positionId: string): Promise<Result<object>> {
+export async function closePosition(positionId: string): Promise<Result<{ intentId: string }>> {
   const key = await tradingKey(CLOSE_DEADLINE_SEC);
   if (!key.ok) return key;
   const position = key.account.openPositions.find((p) => p.positionId === positionId);
@@ -110,7 +97,7 @@ export async function closePosition(positionId: string): Promise<Result<object>>
     positionId,
     deadline: new Date(Number(orderDeadline) * 1000),
   });
-  return { ok: true };
+  return { ok: true, intentId: accepted };
 }
 
 /** The order is already with papertrade, so a logging failure mustn't fail the request. */

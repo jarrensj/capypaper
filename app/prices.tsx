@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { formatPrice } from "@/lib/format";
-import { MARKETS, type Coin } from "@/lib/papertrade/markets";
+import { MARKETS, midRaw, type Coin } from "@/lib/papertrade/markets";
 
 // Papertrade prices against HyperCore's book, so stream its best bid/offer.
 const HL_WS_URL = "wss://api.hyperliquid.xyz/ws";
-const STALE_AFTER_MS = 10_000;
+export const STALE_AFTER_MS = 10_000;
 // Close a socket that's open but silent, and reconnect.
 const SILENT_SOCKET_MS = 3 * STALE_AFTER_MS;
 const PING_EVERY_MS = 30_000;
@@ -45,7 +45,7 @@ export function Prices() {
 }
 
 /** Live HyperCore best bid/offer per coin, reconnecting with backoff when the socket drops. */
-function useBbo() {
+export function useBbo() {
   const [quotes, setQuotes] = useState<Partial<Record<Coin, Quote>>>({});
   const [now, setNow] = useState<number | null>(null);
 
@@ -120,8 +120,5 @@ function parseBbo(raw: string) {
   // non-positive price, or a crossed book.
   if (!(bid > 0) || !(ask > 0) || ask < bid) return null;
 
-  // Papertrade's mid is integer division of the scaled bid and ask.
-  const scale = market.priceScale;
-  const mid = Math.floor((Math.round(bid * scale) + Math.round(ask * scale)) / 2) / scale;
-  return { coin: market.coin, bid, ask, mid };
+  return { coin: market.coin, bid, ask, mid: midRaw(bid, ask, market.priceScale) / market.priceScale };
 }
