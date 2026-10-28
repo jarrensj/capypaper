@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { HYPEREVM } from "@/lib/papertrade/config";
 import {
@@ -64,6 +65,9 @@ export function WalletSession({ session }: { session: SessionView | null }) {
               Disconnect
             </button>
           </div>
+          <Link className="text-sm underline" href="/settings">
+            Settings
+          </Link>
         </>
       ) : (
         <>
