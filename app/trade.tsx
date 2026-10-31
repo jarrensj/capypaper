@@ -27,6 +27,8 @@ type Awaiting =
   | { kind: "open"; intentId: string | null; knownPositionIds: string[] }
   | { kind: "close"; positionIds: string[] };
 
+type CoinFace = "Heads" | "Tails";
+
 const REFRESH_EVERY_MS = 2000;
 // Longer than an open's 60s deadline, so a missing fill means it didn't go through.
 const SETTLE_TIMEOUT_MS = 75_000;
@@ -39,6 +41,7 @@ export function Trade({ view }: { view: TradeView }) {
   const [error, setError] = useState<string | null>(null);
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  const [flipped, setFlipped] = useState<CoinFace | null>(null);
   const [busy, startTransition] = useTransition();
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -68,7 +71,8 @@ export function Trade({ view }: { view: TradeView }) {
     });
   }
 
-  function open(isLong: boolean) {
+  function open(isLong: boolean, face: CoinFace | null = null) {
+    setFlipped(face);
     const knownPositionIds = view.positions.map((p) => p.positionId);
     submit(async () => {
       const result = await openPosition({ coin, isLong, margin, leverage: Number(leverage) });
@@ -78,7 +82,14 @@ export function Trade({ view }: { view: TradeView }) {
     });
   }
 
+  // Heads opens a long, tails a short, with the market, margin and leverage in the form.
+  function flipAndOpen() {
+    const face = flipCoin();
+    open(face === "Heads", face);
+  }
+
   function close(positionId: string) {
+    setFlipped(null);
     submit(async () => {
       const result = await closePositions([positionId]);
       return result.ok ? { ok: true, awaiting: { kind: "close", positionIds: [positionId] } } : result;
@@ -122,10 +133,20 @@ export function Trade({ view }: { view: TradeView }) {
         <button type="button" className="rounded border px-4 py-1" disabled={busy || waiting} onClick={() => open(false)}>
           Short
         </button>
+        <button type="button" className="rounded border px-4 py-1" disabled={busy || waiting} onClick={flipAndOpen}>
+          Flip a coin
+        </button>
       </form>
       <p className="text-sm">
         Papertrade&apos;s minimums: $10 margin and a $1,000 position (margin × leverage).
       </p>
+      <p className="text-sm">Flip a coin: heads opens a long, tails opens a short.</p>
+
+      {flipped && (
+        <p role="status">
+          {flipped}! Your order is a {flipped === "Heads" ? "long" : "short"}.
+        </p>
+      )}
 
       {busy && <p role="status">Sending your order to papertrade…</p>}
       {waiting && <p role="status">Waiting for papertrade to fill your order…</p>}
@@ -183,6 +204,10 @@ export function Trade({ view }: { view: TradeView }) {
       )}
     </section>
   );
+}
+
+function flipCoin(): CoinFace {
+  return crypto.getRandomValues(new Uint32Array(1))[0] % 2 === 0 ? "Heads" : "Tails";
 }
 
 function isSettled(awaiting: Awaiting, positions: PositionView[]) {
